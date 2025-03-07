@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: chat-app-frontend
-        image: docker.io/developer9844/chat-app:frontend_v3.0
+        image: docker.io/developer9844/chat-app:frontend_v4.0
         imagePullPolicy: IfNotPresent
         env:
           - name: API_BASE_URL

@@ -30,7 +30,7 @@ spec:
             - name: MYSQL_PASSWORD
               value: "testPassword"
             - name: MYSQL_DATABASE
-              value: "test_db"
+              value: "todo_db"
           ports:
             - containerPort: 3306
               name: mysql

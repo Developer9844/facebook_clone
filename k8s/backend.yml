@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: chat-app-backend
-        image: docker.io/developer9844/chat-app:backend_v3.0
+        image: docker.io/developer9844/chat-app:backend_v4.0
         imagePullPolicy: IfNotPresent
         envFrom:
           - secretRef:
