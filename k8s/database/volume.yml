@@ -6,25 +6,25 @@ spec:
   capacity:
     storage: 10G
   accessModes:
-    - ReadWriteMany
-  storageClassName: manual
+    - ReadWriteOnce
+  storageClassName: standard
   hostPath:
-    path: /mnt/database
+    path: /mnt/data
 
 ---
 
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-pvc
+  name: mysql-pv-claim
   namespace: db
   labels:
     app: mysql
 spec:
   resources:
     requests:
-      storage: 10G
-  storageClassName: manual
+      storage: 5G
+  storageClassName: standard
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
 

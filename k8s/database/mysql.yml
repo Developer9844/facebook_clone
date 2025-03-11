@@ -8,7 +8,6 @@ metadata:
     version: v1
 
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: mysql
@@ -21,16 +20,28 @@ spec:
     spec:
       containers:
         - name: mysql
-          image: mysql:8.0
+          image: mysql:5.7
           env:
-            - name: MYSQL_ROOT_PASSWORD
-              value: "root123"
-            - name: MYSQL_USER
-              value: "testUser123"
-            - name: MYSQL_PASSWORD
-              value: "testPassword"
-            - name: MYSQL_DATABASE
-              value: "todo_db"
+          - name: MYSQL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: db-secret
+                key: MYSQL_DATABASE
+          - name: MYSQL_USER
+            valueFrom:
+              secretKeyRef:
+                name: db-secret
+                key: MYSQL_USER
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: db-secret
+                key: MYSQL_PASSWORD
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: db-secret
+                key: MYSQL_ROOT_PASSWORD
           ports:
             - containerPort: 3306
               name: mysql
@@ -41,11 +52,8 @@ spec:
       volumes:
         - name: mysql-persistent-storage
           persistentVolumeClaim:
-            claimName: mysql-pvc
+            claimName: mysql-pv-claim
 
-        # - name: mysql-init-script
-        #   configMap:
-        #     name: mysql-init-script
 
 ---
 
@@ -62,7 +70,7 @@ spec:
   ports:
     - port: 3306
       targetPort: 3306
-  selector:       # mysql Pod Should contain same labels
+  selector:      
     app: mysql
     
-  clusterIP: None 
+  clusterIP: None
