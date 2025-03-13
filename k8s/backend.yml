@@ -3,7 +3,8 @@ kind: Deployment
 metadata:
   name: chat-app-backend
 spec:
-  replicas: 2
+  
+  replicas: 16
   selector:
     matchLabels:
       app: chat-app-backend
@@ -12,6 +13,31 @@ spec:
       labels:
         app: chat-app-backend
     spec:
+      affinity:
+        nodeAffinity:
+          # requiredDuringSchedulingIgnoredDuringExecution:
+          #   nodeSelectorTerms:
+          #     - matchExpressions:
+          #         - key: disk
+          #           operator: In
+          #           values:
+          #             - ssd
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - key: disk
+                    operator: In
+                    values:
+                      - ssd
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: disk
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: chat-app-backend
+
       containers:
       - name: chat-app-backend
         image: docker.io/developer9844/chat-app:backend_v4.0
