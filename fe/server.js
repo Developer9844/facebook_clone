@@ -130,7 +130,7 @@ app.get('/profile', async (req, res) => {
         user.posts = postsResponse.data; // Attach posts to user object
         
 
-        res.render('profile', { user, error: null, success: null });
+        res.render('profile', { user: req.session.user, error: null, success: "Post updated successfully." });
     } catch (error) {
         console.error("Error fetching profile or posts:", error.response ? error.response.data : error.message);
         res.render('profile', { user: {}, error: "Failed to fetch profile data.", success: null });

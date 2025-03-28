@@ -4,7 +4,10 @@ from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import mysql.connector
 import datetime
+import pika
+import json
 import os
+from celery import Celery
 
 app = Flask(__name__)
 CORS(app)
@@ -12,10 +15,35 @@ bcrypt = Bcrypt(app)
 app.config['JWT_SECRET_KEY'] = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1YiI6IkpvaG5ueSIsIlN1cm5hbWUiOiJSb2NrZXQiLCJFbWFpbCI6Impyb2NrZXRAZXhhbXBsZS5jb20iLCJSb2xlIjpbIk1hbmFnZXIiLCJQcm9qZWN0IEFkbWluaXN0cmF0b3IiXX0.RSq0eQtMWrxk4xxSiF8kD9B1L_8WExdEy-pCzrwSuYY'
 jwt = JWTManager(app)
 
+
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_USER = os.getenv("DB_USER", "ankush-katkurwar")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "Anku$h9844.")
 DATABASE = os.getenv("DATABASE", "facebook_clone")
+
+def make_celery(app):
+    celery = Celery(
+        app.import_name,
+        backend="rpc://",
+        broker="pyamqp://guest@localhost//"
+    )
+    celery.conf.update(app.config)
+    return celery
+
+app.config["CELERY_BROKER_URL"] = "pyamqp://guest@localhost//"
+app.config["CELERY_RESULT_BACKEND"] = "rpc://"
+
+celery = make_celery(app)
+
+@celery.task  # ✅ Register the task
+def save_post_to_db(post_data):
+    # Import here to avoid circular import
+    from models import Post, db  # Ensure you have SQLAlchemy configured
+    post = Post(**post_data)
+    db.session.add(post)
+    db.session.commit()
+    return "Post saved!"
+
 
 # Database connection
 def get_db_connection():
@@ -53,6 +81,31 @@ def migrate():
     db.close()
 
 migrate()
+
+# RabbitMQ Configuration
+RABBITMQ_HOST = "localhost"
+QUEUE_NAME = "post_queue"
+
+def send_message_to_queue(message):
+    connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
+    channel = connection.channel()
+
+    # Declare the queue (it must exist before publishing messages)
+    channel.queue_declare(queue=QUEUE_NAME, durable=True)
+
+    # Publish message to RabbitMQ
+    channel.basic_publish(
+        exchange="",
+        routing_key=QUEUE_NAME,
+        body=json.dumps(message),
+        properties=pika.BasicProperties(
+            delivery_mode=2,  # Makes message persistent
+        )
+    )
+
+    connection.close()
+
+
 
 @app.route("/api/register", methods=["POST"])
 def register():
@@ -189,24 +242,36 @@ def handle_posts():
 
         if request.method == "POST":
             data = request.json
-            cursor.execute("INSERT INTO posts (user_id, content) VALUES (%s, %s)", (user_id, data.get("content")))
-            db.commit()
+            content = data.get("content")
             
-            return jsonify({
-                "full_name": full_name,
+            if not content:
+                return jsonify({"error": "Content cannot be empty"}), 400
+
+            cursor.execute("INSERT INTO posts (user_id, content) VALUES (%s, %s)", (user_id, content))
+            db.commit()
+
+            # Send message to RabbitMQ
+            post_message = {
+                "user_id": user_id,
                 "username": username,
-                "content": data.get("content")
-            })
+                "full_name": full_name,
+                "content": content,
+                "timestamp": datetime.datetime.utcnow().isoformat()
+            }
+            send_message_to_queue(post_message)
+
+            return jsonify(post_message)
 
         # Fetch all posts with user details
         cursor.execute("""
             SELECT users.username, users.full_name, posts.content 
             FROM posts 
-            JOIN users ON posts.id = users.id 
+            JOIN users ON posts.user_id = users.id  -- ✅ Corrected JOIN condition
             ORDER BY posts.created_at DESC
         """)
-        
+
         posts = cursor.fetchall()
+
         return jsonify([
             {"username": p[0], "full_name": p[1], "content": p[2]} for p in posts
         ])
@@ -217,6 +282,26 @@ def handle_posts():
     finally:
         cursor.close()
         db.close()  # ✅ Always close the database connection
+
+
+@app.route('/api/posts/full', methods=['GET'])
+@jwt_required()
+def get_posts_with_fullname():
+    db = get_db_connection()  # ✅ Get a new DB connection
+    cursor = db.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT users.id, users.full_name, users.username, posts.content 
+            FROM posts 
+            JOIN users ON posts.user_id = users.id
+        """)
+        posts = cursor.fetchall()
+        return jsonify(posts)
+    
+    finally:
+        cursor.close()
+        db.close()  # ✅ Close DB connection properly
 
 
 
@@ -268,27 +353,6 @@ def modify_post(post_id):
         db.close()  # ✅ Always close the connection
 
 
-
-
-
-@app.route('/api/posts/full', methods=['GET'])
-@jwt_required()
-def get_posts_with_fullname():
-    db = get_db_connection()  # ✅ Get a new DB connection
-    cursor = db.cursor(dictionary=True)
-    
-    try:
-        cursor.execute("""
-            SELECT users.id, users.full_name, users.username, posts.content 
-            FROM posts 
-            JOIN users ON posts.user_id = users.id
-        """)
-        posts = cursor.fetchall()
-        return jsonify(posts)
-    
-    finally:
-        cursor.close()
-        db.close()  # ✅ Close DB connection properly
 
 
 
